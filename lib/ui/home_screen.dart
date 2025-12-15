@@ -21,15 +21,17 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: AccountWidget(
-          account: Account(
-            id: "ID001",
-            name: "Daniel",
-            lastName: "Silveira",
-            balance: 350,
-            accountType: null,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: AccountWidget(
+            account: Account(
+              id: "ID001",
+              name: "Daniel",
+              lastName: "Silveira",
+              balance: 350,
+              accountType: null,
+            ),
           ),
         ),
       ),
