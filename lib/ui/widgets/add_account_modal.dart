@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_banco_douro/models/account.dart';
+import 'package:flutter_banco_douro/services/account_service.dart';
 import 'package:flutter_banco_douro/ui/styles/colors.dart';
+import 'package:uuid/uuid.dart';
 
 class AddAccountModal extends StatefulWidget {
   const AddAccountModal({super.key});
@@ -13,6 +16,7 @@ class _AddAccountModalState extends State<AddAccountModal> {
 
   final _nameController = TextEditingController();
   final _lastNameController = TextEditingController();
+  String _accountTypeController = "AMBROSIA";
 
   final _nameFocus = FocusNode();
   final _lastNameFocus = FocusNode();
@@ -21,6 +25,8 @@ class _AddAccountModalState extends State<AddAccountModal> {
 
   final _nameFieldKey = GlobalKey();
   final _lastNameFieldKey = GlobalKey();
+
+  bool isLoading = false;
 
   @override
   void initState() {
@@ -60,18 +66,6 @@ class _AddAccountModalState extends State<AddAccountModal> {
     );
   }
 
-  void _submit() {
-    final isValid = _formKey.currentState?.validate() ?? false;
-    if (!isValid) return;
-
-    final name = _nameController.text.trim();
-    final lastName = _lastNameController.text.trim();
-
-    debugPrint('Submit: $name $lastName');
-
-    Navigator.of(context).pop();
-  }
-
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -82,13 +76,17 @@ class _AddAccountModalState extends State<AddAccountModal> {
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.75,
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: EdgeInsets.only(
+            left: 32,
+            right: 32,
+            top: 32,
+            bottom: bottomInset > 0 ? bottomInset + 16 : 32,
+          ),
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
               controller: _scrollController,
-              padding: EdgeInsets.only(bottom: bottomInset),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -136,17 +134,57 @@ class _AddAccountModalState extends State<AddAccountModal> {
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? "Informe o último nome"
                         : null,
-                    onFieldSubmitted: (_) {
-                      _submit();
+                    onEditingComplete: () {
+                      FocusScope.of(context).unfocus();
                     },
                   ),
-
+                  const SizedBox(height: 24),
+                  // const Text(
+                  //   "Tipo da conta",
+                  //   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  // ),
+                  // const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: _accountTypeController,
+                    decoration: const InputDecoration(
+                      labelText: "Selecione o tipo de conta",
+                      border: UnderlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: "AMBROSIA",
+                        child: Text("Ambrosia"),
+                      ),
+                      DropdownMenuItem(
+                        value: "CANJICA",
+                        child: Text("Canjica"),
+                      ),
+                      DropdownMenuItem(value: "PUDIM", child: Text("Pudim")),
+                      DropdownMenuItem(
+                        value: "BRIGADEIRO",
+                        child: Text("Brigadeiro"),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _accountTypeController = value;
+                        });
+                      }
+                    },
+                    validator: (value) =>
+                        value == null ? "Selecione um tipo" : null,
+                  ),
                   const SizedBox(height: 32),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: (isLoading)
+                              ? null
+                              : () {
+                                  onButtonCancelClicked();
+                                },
                           style: const ButtonStyle(
                             backgroundColor: WidgetStatePropertyAll(
                               Colors.white,
@@ -161,16 +199,18 @@ class _AddAccountModalState extends State<AddAccountModal> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _submit,
+                          onPressed: onButtonAddClicked,
                           style: ButtonStyle(
                             backgroundColor: WidgetStatePropertyAll(
                               AppColor.orange,
                             ),
                           ),
-                          child: const Text(
-                            "Adicionar",
-                            style: TextStyle(color: Colors.black),
-                          ),
+                          child: (isLoading)
+                              ? CircularProgressIndicator(color: Colors.white)
+                              : const Text(
+                                  "Adicionar",
+                                  style: TextStyle(color: Colors.black),
+                                ),
                         ),
                       ),
                     ],
@@ -183,5 +223,67 @@ class _AddAccountModalState extends State<AddAccountModal> {
         ),
       ),
     );
+  }
+
+  void onButtonCancelClicked() {
+    if (!isLoading) {
+      Navigator.pop(context);
+    }
+  }
+
+  void onButtonAddClicked() async {
+    if (!isLoading) {
+      setState(() {
+        isLoading = true;
+      });
+
+      final isValid = _formKey.currentState?.validate() ?? false;
+      if (!isValid) {
+        setState(() {
+          isLoading = false;
+        });
+        return;
+      }
+
+      String name = _nameController.text.trim();
+      String lastName = _lastNameController.text.trim();
+
+      Account account = Account(
+        id: const Uuid().v4(),
+        name: name,
+        lastName: lastName,
+        balance: 0,
+        accountType: _accountTypeController,
+      );
+
+      try {
+        await AccountService().addAccount(account);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Conta adicionada com sucesso!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          setState(() {
+            isLoading = false;
+          });
+          Navigator.of(context).pop(true);
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao adicionar conta: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 }
